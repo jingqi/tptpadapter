@@ -6,9 +6,12 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import parser.items.*;
+import parser.record.ActionRecord.MethodAction;
 
 /**
  * 将 Android Trace 记录适配到 TPTP Trace 记录
+ *
+ * @author jingqi
  */
 public class TptpAdapter {
 
@@ -30,22 +33,28 @@ public class TptpAdapter {
 
 	private static final Logger logger = Logger.getLogger(TptpAdapter.class.getCanonicalName());
 
-	public TptpAdapter(final ITptpHandler handler) {
+	public TptpAdapter(ITptpHandler handler) {
 		tptpHandler = handler;
 	}
 
-	/** 从us(微秒)中提取s(秒) */
-	private static long secOfusec(final long usec) {
+	/**
+	 * 将us(微秒)转换为s(秒)
+	 */
+	private static long usec2sec(long usec) {
 		return usec / 1000000;
 	}
 
-	/** 从us(微秒)中提取ns(纳秒) */
-	private static long nsecOfusec(final long usec) {
+	/**
+	 * 将us(微秒)转换为ns(纳秒)
+	 */
+	private static long usec2nsec(long usec) {
 		return (usec % 1000000) * 1000;
 	}
 
-	/** 将 android trace 中的类名替换为 tptp trace 中的类名称 */
-	private static String androidName2TptpName(final String className) {
+	/**
+	 * 将 android trace 中的类名替换为 tptp trace 中的类名称
+	 */
+	private static String androidName2TptpName(String className) {
 		final StringBuilder sb = new StringBuilder(className.length());
 		for (int i = 0; i < className.length(); ++i) {
 			char c = className.charAt(i);
@@ -56,19 +65,19 @@ public class TptpAdapter {
 		return sb.toString();
 	}
 
-	public void addKeyFileVersion(final int version) {
+	public void addKeyFileVersion(int version) {
 		logger.info("key file version : " + version);
 		// nothing to do
 	}
 
-	public void addThread(final int tid, final String name) {
+	public void addThread(int tid, String name) {
 		logger.info("add thread : " + tid + " " + name);
 		final ThreadItem ti = new ThreadItem(tid, name);
 		threads.put(Integer.valueOf(tid), ti);
 	}
 
-	public void addMethod(final long methodAddress, String className, String methodName, final String signature,
-			final String sourceFile, final int sourceLine) {
+	public void addMethod(long methodAddress, String className, String methodName, String signature,
+			String sourceFile, int sourceLine) {
 		className = androidName2TptpName(className);
 		if (methodName.equals("<init>")) {
 			methodName = "-init-";
@@ -95,7 +104,7 @@ public class TptpAdapter {
 	 *            The application is expected to parse all of the header fields,
 	 *            then seek to "offset to data" from the start of the file. From
 	 *            there it just reads 9-byte records until EOF is reached.
-	 * 
+	 *
 	 * @param startDateTime
 	 *            start date/time in usec is the output from gettimeofday().
 	 *            It's mainly there so that you can tell if the output was
@@ -108,11 +117,11 @@ public class TptpAdapter {
 
 		// start
 		tptpHandler.handleStart();
-		tptpHandler.handleNode("", "localhost", "127.0.0.1", -480, secOfusec(startDateTime), nsecOfusec(startDateTime));
-		tptpHandler.handleProcessCreate(processUuid, 3812, "", secOfusec(startDateTime), nsecOfusec(startDateTime));
+		tptpHandler.handleNode("", "localhost", "127.0.0.1", -480, usec2sec(startDateTime), usec2nsec(startDateTime));
+		tptpHandler.handleProcessCreate(processUuid, 3812, "", usec2sec(startDateTime), usec2nsec(startDateTime));
 		tptpHandler.handleAgentCreate(agentUuid, "2.000", processUuid, "org.eclipse.tptp.jvmti", "Profiler",
-				"server=controlled", secOfusec(startDateTime), nsecOfusec(startDateTime));
-		tptpHandler.handleTraceStart(traceUuid, agentUuid, secOfusec(startDateTime), nsecOfusec(startDateTime));
+				"server=controlled", usec2sec(startDateTime), usec2nsec(startDateTime));
+		tptpHandler.handleTraceStart(traceUuid, agentUuid, usec2sec(startDateTime), usec2nsec(startDateTime));
 
 		// filters
 		// tptpHandler.handleFilter("java$lang", "EXCLUDE", "PREFIX", "",
@@ -142,26 +151,26 @@ public class TptpAdapter {
 	 *            1 - method exit <br/>
 	 *            2 - method "exited" when unrolled by exception handling <br/>
 	 *            3 - (reserved)
-	 * 
+	 *
 	 * @param deltaTime
 	 *            32-bit integer can hold about 70 minutes of time in
 	 *            microseconds.
 	 */
-	public void addMethodAction(final int threadId, final long methodAddress, final int methodAction,
-			final long deltaTime) {
+	public void addMethodAction(int threadId, long methodAddress, MethodAction methodAction,
+			long deltaTime) {
 		final long time = startTimeUsec + deltaTime;
 		endTimeUsec = time;
 
 		final ThreadItem ti = threads.get(Integer.valueOf(threadId));
 		if (!ti.hasLogged()) {
-			tptpHandler.handleThreadStart(threadId, secOfusec(time), nsecOfusec(time), ti.getThreadName(), null, null);
+			tptpHandler.handleThreadStart(threadId, usec2sec(time), usec2nsec(time), ti.getThreadName(), null, null);
 			ti.setLogged(true);
 		}
 
 		final MethodItem mi = methods.get(Long.valueOf(methodAddress));
 		final ClassItem ci = classesIds.get(Integer.valueOf(mi.getClassId()));
 		if (!ci.hasLogged()) {
-			tptpHandler.handleClassDef(ci.getClassId(), ci.getClassName(), null, secOfusec(time), nsecOfusec(time));
+			tptpHandler.handleClassDef(ci.getClassId(), ci.getClassName(), null, usec2sec(time), usec2nsec(time));
 			ci.setLogged(true);
 		}
 
@@ -172,23 +181,23 @@ public class TptpAdapter {
 		}
 
 		switch (methodAction) {
-		case 0:
+		case ENTRY:
 			// logger.info("enter method : " + mi.getMethodName());
 			ti.pushMethodCall(mi);
-			tptpHandler.handleMethodEntry(threadId, ci.getClassId(), mi.getMethodId(), secOfusec(time),
-					nsecOfusec(time), ti.getTicketOfCurrentMethod(), ti.getDepthOfCallStack());
+			tptpHandler.handleMethodEntry(threadId, ci.getClassId(), mi.getMethodId(), usec2sec(time),
+					usec2nsec(time), ti.getTicketOfCurrentMethod(), ti.getDepthOfCallStack());
 			break;
 
-		case 1:
-		case 2:
+		case EXIT:
+		case EXIT_EXCEPTION:
 			if (0 == ti.getDepthOfCallStack()) {
 				logger.warning("failed to exit method without calling record : " + mi.getMethodName());
 				break;
 			}
 
 			// logger.info("exit method : " + mi.getMethodName());
-			tptpHandler.handleMethodExit(threadId, ci.getClassId(), mi.getMethodId(), secOfusec(time),
-					nsecOfusec(time), ti.getTicketOfCurrentMethod());
+			tptpHandler.handleMethodExit(threadId, ci.getClassId(), mi.getMethodId(), usec2sec(time),
+					usec2nsec(time), ti.getTicketOfCurrentMethod());
 			ti.popMethodCall(mi);
 			break;
 
@@ -198,8 +207,8 @@ public class TptpAdapter {
 	}
 
 	public void end() {
-		tptpHandler.handleTraceEnd(secOfusec(endTimeUsec), nsecOfusec(endTimeUsec));
-		tptpHandler.handleAgentDestroy(agentUuid, secOfusec(endTimeUsec), nsecOfusec(endTimeUsec));
+		tptpHandler.handleTraceEnd(usec2sec(endTimeUsec), usec2nsec(endTimeUsec));
+		tptpHandler.handleAgentDestroy(agentUuid, usec2sec(endTimeUsec), usec2nsec(endTimeUsec));
 		tptpHandler.handleEnd();
 	}
 }

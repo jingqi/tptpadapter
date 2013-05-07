@@ -1,19 +1,41 @@
 import java.io.*;
+import java.util.logging.*;
 
 import parser.*;
 
 public class Main {
 
+	private static void setUpLogger() {
+		Formatter fmt = new Formatter() {
+
+			@Override
+			public String format(LogRecord record) {
+				StringBuilder sb = new StringBuilder();
+		    	sb.append(record.getLevel().getLocalizedName()).append(" ");
+		    	sb.append(record.getMessage()).append("\n");
+				return sb.toString();
+			}
+		};
+		Handler[] hs = Logger.getLogger("").getHandlers();
+		for (int i = 0; i < hs.length; ++i)
+			hs[i].setFormatter(fmt);
+	}
+
 	/**
 	 * android 性能跟踪文件是 .trace 文件
 	 * TPTP(eclipse 的性能分析插件)性能文件是 .trcbin .trcxml 文件(分别对应二进制和xml格式)
+	 *
+	 * 关于 android trace 文件结构，参见
+	 * http://developer.android.com/tools/debugging/debugging-tracing.html
 	 */
 	public static void main(final String[] args) throws IOException {
+
+		setUpLogger();
 
 		String source = null, dest = null;
 
 		// for debug
-//		source = "./testopen.trace";
+		source = "E:\\data\\application\\win7_64\\developer\\android_sdk_windows_rev21\\platform-tools\\t.trace";
 //		dest = "./output.trcxml";
 
 		// get source
