@@ -8,21 +8,48 @@ import java.util.regex.Pattern;
  */
 public class TraceRecordParser {
 
+	/**
+	 * 分析过程中的状态
+	 */
 	enum State {
+		/**
+		 * 期待 "*version" 提示语句
+		 */
 		EXPECT_VERSION,
 
+		/**
+		 * 分析日志格式版本
+		 */
 		PARSING_VERSION,
 
+		/**
+		 * 分析选项
+		 */
 		PARSING_OPTIONS,
 
+		/**
+		 * 分析线程列表
+		 */
 		PARSING_THREDS,
 
+		/**
+		 * 分析方法列表
+		 */
 		PARSING_METHODS,
 
+		/**
+		 * 分析头部信息
+		 */
 		EXPECT_HEAD_RECORD,
 
+		/**
+		 * 分析空白
+		 */
 		EXPECT_BLANK,
 
+		/**
+		 * 分析二进制记录
+		 */
 		PARSING_RECORDS,
 	}
 
@@ -72,11 +99,15 @@ public class TraceRecordParser {
 			throw new IllegalArgumentException("unknown format : " + s);
 
 		case PARSING_THREDS:
-			p = Pattern.compile("\\s*" + "(\\d+)" + "\\s+" + "([^\\s](.*[^\\s])?)" + "\\s*");
+			p = Pattern.compile("\\s*" + "(\\d+)" + "(\\s+" + "([^\\s](.*[^\\s])?))?" + "\\s*");
 			m = p.matcher(s);
 			if (m.matches()) {
 				final int tid = Integer.valueOf(m.group(1));
-				final String tname = m.group(2);
+				String tname;
+				if (m.group(2) != null)
+					tname = m.group(3);
+				else
+					tname = "";
 				tptpAdapter.addThread(tid, tname);
 				return 0;
 			}
